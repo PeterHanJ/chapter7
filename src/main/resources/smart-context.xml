@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:p="http://www.springframework.org/schema/p"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+            http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+            http://www.springframework.org/schema/context
+            http://www.springframework.org/schema/context/spring-context-4.0.xsd
+            http://www.springframework.org/schema/tx
+            http://www.springframework.org/schema/tx/spring-tx-4.0.xsd
+            http://www.springframework.org/schema/aop
+            http://www.springframework.org/schema/aop/spring-aop-4.0.xsd">
+
+    <bean id="beforeAdvice" class="com.smart.advice.GreetingBeforeAdvice"/>
+    <bean id="afterAdvice" class="com.smart.advice.GreetingAfterAdvice"/>
+    <bean id="aroundAdvice" class="com.smart.advice.GreetingInterceptor"/>
+    <bean id="throwAdvice" class="com.smart.advice.GreetingThrowsAdvice"/>
+    <bean id="target" class="com.smart.advice.NaiveWaiter"/>
+    <!--<bean id="waiter" class="org.springframework.aop.framework.ProxyFactoryBean"
+          p:proxyInterfaces="com.smart.advice.Waiter"
+          p:interceptorNames="beforeAdvice,afterAdvice"
+          p:target-ref="target"/>-->
+    <bean id="waiter" class="org.springframework.aop.framework.ProxyFactoryBean"
+          p:proxyInterfaces="com.smart.advice.Waiter"
+          p:target-ref="target"
+          p:proxyTargetClass="true"> <!--Use CGLib to proxy class-->
+        <property name="interceptorNames">
+            <list>
+                <idref bean="beforeAdvice"/>
+                <idref bean="afterAdvice"/>
+                <idref bean="aroundAdvice"/>
+                <idref bean="throwAdvice"/>
+            </list>
+        </property>
+    </bean>
+
+    <!--Introduce Advice Interface 'Monitorable'-->
+    <!--Must use CGLib to create sub class-->
+    <bean id="forumServiceTarget" class="com.smart.proxy.ForumServiceImpl"/>
+    <bean id="pmonitor" class="com.smart.introduce.ControllablePerformanceMonitor"/>
+    <bean id="forumService" class="org.springframework.aop.framework.ProxyFactoryBean"
+          p:interfaces="com.smart.introduce.Monitorable"
+          p:target-ref="forumServiceTarget"
+          p:interceptorNames="pmonitor"
+          p:proxyTargetClass="true"
+    />
+
+    <!--IntroductionAdvisor-->
+    <bean id="introduceAdvisor" class="org.springframework.aop.support.DefaultIntroductionAdvisor">
+        <constructor-arg>
+            <bean class="com.smart.introduce.ControllablePerformanceMonitor"/>
+        </constructor-arg>
+    </bean>
+    <bean id="forumService2" class="org.springframework.aop.framework.ProxyFactoryBean"
+          p:interceptorNames="introduceAdvisor"
+          p:target-ref="forumServiceTarget"
+          p:proxyTargetClass="true"
+    />
+
+    <!--static method matcher start-->
+    <!--define target-->
+    <bean id="waiterTarget" class="com.smart.advice.NaiveWaiter"/>
+    <bean id="sellerTarget" class="com.smart.advice.Seller"/>
+    <!--define advisor-->
+    <bean id="greetingAdvisor" class="com.smart.advisor.GreetingAdvisor"
+        p:advice-ref="beforeAdvice"/>
+    <!--define proxy bean-->
+    <bean id="parent" abstract="true"
+          class="org.springframework.aop.framework.ProxyFactoryBean"
+          p:interceptorNames="greetingAdvisor"
+          p:proxyTargetClass="true"/>
+    <bean id="waiter1" parent="parent" p:target-ref="waiterTarget"/>
+    <bean id="seller1" parent="parent" p:target-ref="sellerTarget"/>
+    <!--static method matcher end-->
+
+
+    <!--regexp method matcher start-->
+    <!--define advisor-->
+    <bean id="regexpAdvisor"
+          class="org.springframework.aop.support.RegexpMethodPointcutAdvisor"
+          p:advice-ref="beforeAdvice">
+          <property name="patterns">
+              <list>
+                  <value>.*greet.*</value>
+              </list>
+          </property>
+    </bean>
+    <!--define proxy bean-->
+    <bean id="waiter2" class="org.springframework.aop.framework.ProxyFactoryBean"
+          p:interceptorNames="regexpAdvisor"
+          p:target-ref="waiterTarget"
+          p:proxyTargetClass="true" />
+    <!--regexp method matcher end-->
+
+    <!--dynamic method match start-->
+    <!--define advisor-->
+    <bean id="dynamicAdvisor"
+          class="org.springframework.aop.support.DefaultPointcutAdvisor">
+        <property name="pointcut">
+            <bean class="com.smart.advisor.GreetingDynamicPointcut"/>
+        </property>
+        <property name="advice">
+            <bean class="com.smart.advice.GreetingBeforeAdvice"/>
+        </property>
+    </bean>
+    <!--define proxy bean-->
+    <bean id="waiter3" class="org.springframework.aop.framework.ProxyFactoryBean"
+          p:interceptorNames="dynamicAdvisor"
+          p:target-ref="waiterTarget"
+          p:proxyTargetClass="true"/>
+    <!--dynamic method match end-->
+
+    <!--control flow pointcut start-->
+    <!--define pointcut-->
+    <bean id="controlFlowPointcut" class="org.springframework.aop.support.ControlFlowPointcut">
+        <constructor-arg type="java.lang.Class" value="com.smart.advice.WaiterDelegate"></constructor-arg>
+        <constructor-arg type="java.lang.String" value="service"></constructor-arg>
+    </bean>
+    <!--define advisor-->
+    <bean id="controlFlowAdvisor" class="org.springframework.aop.support.DefaultPointcutAdvisor"
+          p:pointcut-ref="controlFlowPointcut"
+          p:advice-ref="beforeAdvice"/>
+    <bean id="waiter4" class="org.springframework.aop.framework.ProxyFactoryBean"
+          p:interceptorNames="controlFlowAdvisor"
+          p:target-ref="waiterTarget"
+          p:proxyTargetClass="true"/>
+    <!--control flow pointcut end-->
+
+    <!--composable pointcut start-->
+    <bean id = "gcp" class="com.smart.advisor.GreetingComposablePointcut"/>
+    <bean id = "composableAdvisor" class="org.springframework.aop.support.DefaultPointcutAdvisor"
+          p:pointcut = "#{gcp.intersectionPointcut}"
+          p:advice-ref="beforeAdvice"/>
+    <bean id="waiter5" class="org.springframework.aop.framework.ProxyFactoryBean"
+          p:interceptorNames="composableAdvisor"
+          p:target-ref="waiterTarget"
+          p:proxyTargetClass="true"/>
+    <!--composable pointcut end-->
+</beans>
